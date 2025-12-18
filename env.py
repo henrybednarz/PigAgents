@@ -8,15 +8,12 @@ class PigEnv(gym.Env):
         super(PigEnv, self).__init__()
 
         self.PLAYERS = players
-        max_score = 200
 
         self.action_space = gym.spaces.Discrete(2)
-        # Expanded observation space to match requirements
         self.observation_space = gym.spaces.Dict({
-            'scores': gym.spaces.MultiDiscrete([max_score] * players),
-            'turn_total': gym.spaces.Discrete(max_score),
+            'scores': gym.spaces.MultiDiscrete([200] * players),
+            'turn_total': gym.spaces.Discrete(200),
             'current_player': gym.spaces.Discrete(players),
-            'done': gym.spaces.Discrete(2),
             'redemption': gym.spaces.Discrete(2)
         })
 
@@ -97,6 +94,20 @@ class PigEnv(gym.Env):
             self.turn_total += int(d1 + d2)
             break
 
+    def get_payouts(self):
+        payouts = [0] * self.PLAYERS
+        max_score = max(self.scores)
+        multipliers = [2 if score == 0 else 1 for score in self.scores]
+
+        for p in range(self.PLAYERS):
+            if p != self.winner:
+                payouts[p] = multipliers[p] * (self.scores[p] - max_score)
+
+        if self.winner is not None:
+            payouts[self.winner] = -sum(payouts[p] for p in range(self.PLAYERS) if p != self.winner)
+
+        return payouts
+
     def _snake_eyes(self):
         self.scores[self.current_player] = 0
         self.turn_total = 0
@@ -126,18 +137,4 @@ class PigEnv(gym.Env):
 
         self.round += 1
         self.current_player = (self.current_player + 1) % self.PLAYERS
-
-    def get_payouts(self):
-        payouts = [0] * self.PLAYERS
-        max_score = max(self.scores)
-        multipliers = [2 if score == 0 else 1 for score in self.scores]
-
-        for p in range(self.PLAYERS):
-            if p != self.winner:
-                payouts[p] = multipliers[p] * (self.scores[p] - max_score)
-
-        if self.winner is not None:
-            payouts[self.winner] = -sum(payouts[p] for p in range(self.PLAYERS) if p != self.winner)
-
-        return payouts
 
