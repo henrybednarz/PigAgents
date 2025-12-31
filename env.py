@@ -43,8 +43,9 @@ class PigEnv(gym.Env):
         return self._get_obs(), {}
 
     def _get_obs(self):
+        # return a lightweight view: tuple for scores (cheaper than creating numpy array each step)
         return {
-            'scores': np.array(self.scores, dtype=np.int64),
+            'scores': tuple(self.scores),
             'turn_total': int(self.turn_total),
             'current_player': int(self.current_player),
             'redemption': bool(self.redemption)
@@ -63,14 +64,17 @@ class PigEnv(gym.Env):
 
         terminated = bool(self.game_over)
         truncated = False
-        reward = 0
 
+        # When the episode terminates expose full payouts so trainers can update all agents
         if terminated:
-            total = sum(self.scores)
-            n = self.PLAYERS
-            reward = int(n * self.scores[acting_player] - total)
+            payouts = self.get_payouts()
+            reward = payouts[acting_player]
+            info = {"payouts": payouts, "acting_player": acting_player}
+        else:
+            reward = 0
+            info = {}
 
-        return self._get_obs(), reward, terminated, truncated, {}
+        return self._get_obs(), reward, terminated, truncated, info
 
     def _roll(self):
         while True:
@@ -89,23 +93,20 @@ class PigEnv(gym.Env):
             if d1 + d2 == 7:
                 self._seven()
                 break
+            elif self.turn_total + self.scores[self.current_player] + d1 + d2 == 100:
+                self._snake_eyes()
+                break
 
             self.reroll_count = 0
             self.turn_total += int(d1 + d2)
             break
 
     def get_payouts(self):
+        # Compute zero-sum payouts where payout_p = n * score_p - sum(all_scores)
         payouts = [0] * self.PLAYERS
-        max_score = max(self.scores)
-        multipliers = [2 if score == 0 else 1 for score in self.scores]
-
+        total = sum(self.scores)
         for p in range(self.PLAYERS):
-            if p != self.winner:
-                payouts[p] = multipliers[p] * (self.scores[p] - max_score)
-
-        if self.winner is not None:
-            payouts[self.winner] = -sum(payouts[p] for p in range(self.PLAYERS) if p != self.winner)
-
+            payouts[p] = int(self.PLAYERS * self.scores[p] - total)
         return payouts
 
     def _snake_eyes(self):
@@ -137,4 +138,3 @@ class PigEnv(gym.Env):
 
         self.round += 1
         self.current_player = (self.current_player + 1) % self.PLAYERS
-
